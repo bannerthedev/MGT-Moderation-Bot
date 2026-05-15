@@ -9,20 +9,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== CONFIG ==========
-# EITHER: put your token directly:
 
-# OR: if you use .env, comment the line above and use:
-# TOKEN = os.getenv("TOKEN")
+CLIENT_ID = 1504948194293842135  # optional
 
-CLIENT_ID = 1504948194293842135  # not strictly needed in this script
+# IDs for your servers/channels — change these
+GUILD_EPL_ID = 1501126256849322135
+GUILD_APPEAL_ID = 1504881417513865398
+APPEAL_LOG_CHANNEL_ID = 1504881915277344808
 
-# IDs for your servers/channels
-GUILD_EPL_ID = 1501126256849322135        # ### CHANGE ME ### main server id
-GUILD_APPEAL_ID = 1504881417513865398     # ### CHANGE ME ### appeals server id
-APPEAL_LOG_CHANNEL_ID = 1504881915277344808  # ### CHANGE ME ### log channel id (in appeals server)
-
-MAIN_SERVER_INVITE = "https://discord.gg/YvTxrv7VFa"      # ### CHANGE ME ###
-APPEAL_SERVER_INVITE = "https://discord.gg/yKWsmVZ3jM"    # ### CHANGE ME ###
+MAIN_SERVER_INVITE = "https://discord.gg/YvTxrv7VFa"
+APPEAL_SERVER_INVITE = "https://discord.gg/yKWsmVZ3jM"
 
 APPEAL_COOLDOWN = timedelta(days=30)
 MAX_APPEALS = 3
@@ -269,7 +265,7 @@ class StaffAppealView(discord.ui.View):
 
 # ------------ Slash commands ------------
 
-# Register as GUILD commands (appear almost instantly)
+# Register as GUILD commands
 @tree.command(
     name="ban",
     description="Ban a member and DM them the appeal link.",
@@ -361,20 +357,14 @@ async def appeal_command(interaction: discord.Interaction):
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     try:
-        # Clear all existing commands for those guilds, then resync
-        tree.clear_commands(guild=discord.Object(id=GUILD_EPL_ID))
-        tree.clear_commands(guild=discord.Object(id=GUILD_APPEAL_ID))
-
-        # Re-register the local commands we defined above
-        tree.copy_global_to(guild=discord.Object(id=GUILD_EPL_ID))
-        tree.copy_global_to(guild=discord.Object(id=GUILD_APPEAL_ID))
-
+        # Sync guild commands to the specific guilds
         synced_epl = await tree.sync(guild=discord.Object(id=GUILD_EPL_ID))
         synced_appeal = await tree.sync(guild=discord.Object(id=GUILD_APPEAL_ID))
 
         print(f"EPL guild commands: {[c.name for c in synced_epl]}")
         print(f"Appeal guild commands: {[c.name for c in synced_appeal]}")
-    except Exception as e:        print("Sync error:", e)
+    except Exception as e:
+        print("Sync error:", e)
 
-
-bot.run(os.getenv("TOKEN"))
+else:
+    bot.run(os.getenv("TOKEN"))
