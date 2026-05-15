@@ -366,5 +366,6 @@ async def on_ready():
     except Exception as e:
         print("Sync error:", e)
 
-else:
-    bot.run(os.getenv("TOKEN"))
+
+# Run with TOKEN provided in environment (Railway env var or .env)
+bot.run(os.getenv("TOKEN"))
