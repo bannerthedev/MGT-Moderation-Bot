@@ -39,7 +39,7 @@ tree = bot.tree
 
 # ------------ Helper functions ------------
 
-async def unban_from_epl(user: discord.User):
+async def unban_from_MGT(user: discord.User):
     guild = bot.get_guild(GUILD_EPL_ID)
     if guild is None:
         return False, "Bot is not in the EPL server or cannot see it."
