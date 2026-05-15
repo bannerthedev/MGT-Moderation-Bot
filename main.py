@@ -13,12 +13,12 @@ load_dotenv()
 CLIENT_ID = 1504948194293842135  # optional
 
 # IDs for your servers/channels — change these
-GUILD_EPL_ID = 1501126256849322135
+GUILD_MGT_ID = 1501126256849322135  # formerly GUILD_EPL_ID
 GUILD_APPEAL_ID = 1504881417513865398
 APPEAL_LOG_CHANNEL_ID = 1504881915277344808
 
-MAIN_SERVER_INVITE = "https://discord.gg/YvTxrv7VFa"
-APPEAL_SERVER_INVITE = "https://discord.gg/mGXYDZTk87"
+MGT_SERVER_INVITE = "https://discord.gg/YvTxrv7VFa"  # formerly MAIN_SERVER_INVITE
+APPEAL_SERVER_INVITE = "https://discord.gg/yKWsmVZ3jM"
 
 APPEAL_COOLDOWN = timedelta(days=30)
 MAX_APPEALS = 3
@@ -39,18 +39,18 @@ tree = bot.tree
 
 # ------------ Helper functions ------------
 
-async def unban_from_MGT(user: discord.User):
-    guild = bot.get_guild(GUILD_EPL_ID)
+async def unban_from_mgt(user: discord.User):
+    guild = bot.get_guild(GUILD_MGT_ID)
     if guild is None:
-        return False, "Bot is not in the EPL server or cannot see it."
+        return False, "Bot is not in the MGT server or cannot see it."
 
     try:
         await guild.unban(user, reason="Appeal accepted")
         return True, None
     except discord.NotFound:
-        return False, "User is not banned in GTPL."
+        return False, "User is not banned in MGT."
     except discord.Forbidden:
-        return False, "Bot does not have permission to unban in GTPL."
+        return False, "Bot does not have permission to unban in MGT."
     except Exception as e:
         return False, f"Unban failed: {e}"
 
@@ -190,10 +190,10 @@ class StaffAppealView(discord.ui.View):
         if user is None:
             return await interaction.response.send_message("User not found.", ephemeral=True)
 
-        unban_ok, unban_err = await unban_from_epl(user)
+        unban_ok, unban_err = await unban_from_mgt(user)
         kick_ok, kick_err = await kick_from_appeal_server(user)
 
-        msg = f"Your ban appeal has been **accepted**.\nHere is the server invite: {MAIN_SERVER_INVITE}"
+        msg = f"Your ban appeal has been **accepted**.\nHere is the server invite: {MGT_SERVER_INVITE}"
 
         if not unban_ok and unban_err:
             msg += (
@@ -211,7 +211,7 @@ class StaffAppealView(discord.ui.View):
 
         text_parts = [f"✅ Appeal for {user} has been accepted."]
         if unban_ok:
-            text_parts.append("User was **unbanned from EPL**.")
+            text_parts.append("User was **unbanned from MGT**.")
         else:
             text_parts.append(f"Unban issue: `{unban_err}`")
 
@@ -269,7 +269,7 @@ class StaffAppealView(discord.ui.View):
 @tree.command(
     name="ban",
     description="Ban a member and DM them the appeal link.",
-    guild=discord.Object(id=GUILD_EPL_ID)
+    guild=discord.Object(id=GUILD_MGT_ID)
 )
 @app_commands.describe(
     member="Member to ban",
@@ -282,36 +282,64 @@ async def ban_command(
     reason: str,
     unban_time: str
 ):
-    if interaction.guild_id != GUILD_EPL_ID:
+    # ensure command used in MGT guild
+    if interaction.guild_id != GUILD_MGT_ID:
         return await interaction.response.send_message(
-            "This command can only be used in EPL.",
+            "This command can only be used in MGT.",
             ephemeral=True
         )
 
+    # check issuer perms
     if not interaction.user.guild_permissions.ban_members:
         return await interaction.response.send_message(
             "You do not have permission to use this command.",
             ephemeral=True
         )
 
+    guild = interaction.guild
+    bot_member = guild.get_member(bot.user.id) if guild else None
+
+    # check bot permissions
+    if bot_member is None or not bot_member.guild_permissions.ban_members:
+        return await interaction.response.send_message(
+            "Bot lacks the Ban Members permission in this server.",
+            ephemeral=True
+        )
+
+    # role hierarchy check
+    if member == guild.owner or (bot_member.top_role <= member.top_role):
+        return await interaction.response.send_message(
+            "Cannot ban this member due to role hierarchy or owner status.",
+            ephemeral=True
+        )
+
     try:
         embed = discord.Embed(
-            title="You have been banned from EPL",
+            title="You have been banned from MGT",
             color=discord.Color.red()
         )
-        embed.add_field(name="Server", value="EPL", inline=False)
+        embed.add_field(name="Server", value="MGT", inline=False)
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.add_field(name="Unbanned", value=unban_time, inline=False)
         embed.add_field(
             name="Appeal",
-            value=f"If you want to get unbanned, here is the appeals server:\n{MAIN_SERVER_INVITE}",
+            value=f"If you want to get unbanned, here is the appeals server:\n{APPEAL_SERVER_INVITE}",
             inline=False
         )
-        await member.send(content=f"{member.mention}", embed=embed)
-    except discord.Forbidden:
-        pass
+        try:
+            await member.send(content=f"{member.mention}", embed=embed)
+        except discord.Forbidden:
+            pass
 
-    await member.ban(reason=f"{reason} | Unban: {unban_time}")
+        await guild.ban(member, reason=f"{reason} | Unban: {unban_time}")
+    except discord.Forbidden:
+        return await interaction.response.send_message(
+            "Failed to ban the member: missing permissions (role hierarchy or permissions).",
+            ephemeral=True
+        )
+    except Exception as e:
+        return await interaction.response.send_message(f"Failed to ban member: {e}", ephemeral=True)
+
     await interaction.response.send_message(
         f"✅ {member} has been banned.\nReason: **{reason}**\nUnbanned: **{unban_time}**",
         ephemeral=True
@@ -357,11 +385,10 @@ async def appeal_command(interaction: discord.Interaction):
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     try:
-        # Sync guild commands to the specific guilds
-        synced_epl = await tree.sync(guild=discord.Object(id=GUILD_EPL_ID))
+        synced_mgt = await tree.sync(guild=discord.Object(id=GUILD_MGT_ID))
         synced_appeal = await tree.sync(guild=discord.Object(id=GUILD_APPEAL_ID))
 
-        print(f"EPL guild commands: {[c.name for c in synced_epl]}")
+        print(f"MGT guild commands: {[c.name for c in synced_mgt]}")
         print(f"Appeal guild commands: {[c.name for c in synced_appeal]}")
     except Exception as e:
         print("Sync error:", e)
